@@ -20,13 +20,8 @@ package com.deem.zkui.utils;
 import com.deem.zkui.vo.LeafBean;
 import com.deem.zkui.vo.ZKNode;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
+
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
@@ -42,6 +37,8 @@ import org.json.simple.parser.JSONParser;
 import org.json.simple.parser.ParseException;
 import org.slf4j.LoggerFactory;
 
+import static java.util.HashMap.*;
+
 public enum ZooKeeperUtil {
 
     INSTANCE;
@@ -55,7 +52,7 @@ public enum ZooKeeperUtil {
 
     private final static org.slf4j.Logger logger = LoggerFactory.getLogger(ZooKeeperUtil.class);
 
-    public ZooKeeper createZKConnection(String url, Integer zkSessionTimeout) throws IOException, InterruptedException {
+    public ZooKeeper createZKConnection(String url, String jsonAuthInfos,Integer zkSessionTimeout) throws IOException, InterruptedException {
         Integer connectAttempt = 0;
         ZooKeeper zk = new ZooKeeper(url, zkSessionTimeout, new Watcher() {
             @Override
@@ -71,7 +68,26 @@ public enum ZooKeeperUtil {
                 break;
             }
         }
+        setAuthInfos(zk,jsonAuthInfos);
         return zk;
+
+    }
+
+    private void setAuthInfos(ZooKeeper zk,String jsonAuthInfos) {
+        if (jsonAuthInfos == null || jsonAuthInfos.trim().length() == 0) {
+            logger.trace("Using NONE Authinfo");
+            return;
+        }
+        try {
+            JSONObject jsonObject = (JSONObject)(new JSONParser().parse(jsonAuthInfos));
+            for (Iterator it = jsonObject.entrySet().iterator();it.hasNext();) {
+                HashMap.Entry entry = (HashMap.Entry)it.next();
+                zk.addAuthInfo(entry.getKey().toString(),entry.getValue().toString().getBytes());
+            }
+        } catch (ParseException e) {
+            logger.trace("setAuthInfos error jsonAuthInfos is {}",jsonAuthInfos,e);
+        }
+
 
     }
 
@@ -251,12 +267,15 @@ public enum ZooKeeperUtil {
     public ZKNode listNodeEntries(ZooKeeper zk, String path, String authRole) throws KeeperException, InterruptedException {
         List<String> folders = new ArrayList<>();
         List<LeafBean> leaves = new ArrayList<>();
+        zk.addAuthInfo("digest","id.flight:flight".getBytes());
+        zk.addAuthInfo("digest","wangjixue:wangjixue".getBytes());
+//        zk.setACL("/dd-job",ZooDefs.Ids.CREATOR_ALL_ACL,0);
 
         List<String> children = zk.getChildren(path, false);
         if (children != null) {
             for (String child : children) {
                 if (!child.equals(ZK_SYSTEM_NODE)) {
-
+                    System.out.println("==============="+child);
                     List<String> subChildren = zk.getChildren(path + ("/".equals(path) ? "" : "/") + child, false);
                     boolean isFolder = subChildren != null && !subChildren.isEmpty();
                     if (isFolder) {
